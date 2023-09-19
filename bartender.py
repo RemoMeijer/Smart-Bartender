@@ -47,6 +47,8 @@ TRIGGER_PIN = 22
 ECHO_PIN = 27
 GLASS_DETECTION_RANGE = 10
 
+# Flow rate of the pumps
+# Todo: Configure!
 FLOW_RATE = 5
 
 
@@ -75,19 +77,20 @@ class Bartender(MenuDelegate):
         self.btn1Pin = LEFT_BTN_PIN
         self.btn2Pin = RIGHT_BTN_PIN
 
-        # configure interrupts for buttons
+        # Configure interrupts for buttons
         GPIO.setup(self.btn1Pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
         GPIO.setup(self.btn2Pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
 
+        # Configure Ultrasonic device
         GPIO.setup(TRIGGER_PIN, GPIO.OUT)
         GPIO.setup(ECHO_PIN, GPIO.IN)
 
-        # load the pump configuration from file
+        # Load the pump configuration from file
         self.pump_configuration = Bartender.readPumpConfiguration()
         for pump in self.pump_configuration.keys():
             GPIO.setup(self.pump_configuration[pump]["pin"], GPIO.OUT, initial=GPIO.HIGH)
 
-        # turn everything off
+        # LED strip startup
         strip.start_up()
         strip.turn_off()
 
@@ -196,39 +199,47 @@ class Bartender(MenuDelegate):
         return False
 
     def clean(self):
-        waitTime = 20
+        waitTime = 10
         pumpThreads = []
 
-        # cancel any button presses while the drink is being made
+        # Cancel any button presses while the drink is being made
         self.stopInterrupts()
         self.running = True
 
+        displayOLEDText(disp, "Clean")
+        displayOLEDText(disp2, "ing")
+
         # Set LED to red when cleaning
-        light_thread = threading.Thread(target=strip.set_all(255, 0, 0))
+        light_thread = threading.Thread(target=strip.set_all(0, 0, 255))
         light_thread.start()
 
         for pump in self.pump_configuration.keys():
             pump_t = threading.Thread(target=self.pour, args=(self.pump_configuration[pump]["pin"], waitTime))
             pumpThreads.append(pump_t)
 
-        # start the pump threads
+        # Start the pump threads
         for thread in pumpThreads:
             thread.start()
 
-        # start the progress bar
+        # Start the progress bar
         self.progressBar(waitTime)
 
-        # wait for threads to finish
+        # Wait for threads to finish
         for thread in pumpThreads:
             thread.join()
 
-        # show the main menu
+        displayOLEDText(disp, "Done")
+        displayOLEDText(disp2, "clean\ning")
+
+        time.sleep(1)
+
+        # Show the main menu
         self.menuContext.showMenu()
 
-        # sleep for a couple seconds to make sure the interrupts don't get triggered
+        # Sleep for a couple seconds to make sure the interrupts don't get triggered
         time.sleep(2)
 
-        # re-enable interrupts
+        # Re-enable interrupts
         self.startInterrupts()
         self.running = False
 
@@ -271,7 +282,7 @@ class Bartender(MenuDelegate):
 
         # Wait until glass is placed
         while distance > GLASS_DETECTION_RANGE:
-            displayOLEDText(disp, "No glass")
+            displayOLEDText(disp, "No\nglass")
             distance = calculateGlassDistance()
             time.sleep(0.2)
 
@@ -330,6 +341,7 @@ class Bartender(MenuDelegate):
             self.menuContext.select()
 
     def updateProgressBar(self, percent):
+        # On disp2, because disp1 already states: "Pouring"
         displayOLEDText(disp2, f"{percent}%")
 
     def run(self):
