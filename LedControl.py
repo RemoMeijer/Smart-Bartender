@@ -40,20 +40,25 @@ class LEDStrip:
         self.set_all(0, 0, 0)
 
     def color_wipe(self, color, wait_ms=50):
-        """Wipe color across display a pixel at a time."""
+        # Wipe color across display a pixel at a time
         for i in range(self.strip.numPixels()):
             self.set_pixel_color(i, color)
             self.show()
             time.sleep(wait_ms / 1000.0)
 
-    def lightsEndingSequence(self):
+    def lightsEndingSequence(self, wait_ms=50):
+        # Set all to green
         for i in range(self.strip.numPixels()):
             self.set_pixel_color(i, Color(0, 255, 0))
-            time.sleep(5)
-            self.turn_off()
+            self.show()
+            time.sleep(wait_ms / 1000.0)
+
+        # Wait a bit and turn off
+        time.sleep(2)
+        self.turn_off()
 
     def theater_chase(self, color, wait_ms=50, iterations=10):
-        """Movie theater light style chaser animation."""
+        # Movie theater light style chaser animation
         for j in range(iterations):
             for q in range(3):
                 for i in range(0, self.strip.numPixels(), 3):
@@ -65,7 +70,7 @@ class LEDStrip:
 
     @staticmethod
     def wheel(pos):
-        """Generate rainbow colors across 0-255 positions."""
+        # Generate rainbow colors across 0-255 positions
         if pos < 85:
             return Color(pos * 3, 255 - pos * 3, 0)
         elif pos < 170:
@@ -76,7 +81,7 @@ class LEDStrip:
             return Color(0, pos * 3, 255 - pos * 3)
 
     def rainbow(self, wait_ms=20, iterations=1):
-        """Draw rainbow that fades across all pixels at once."""
+        # Draw rainbow that fades across all pixels at once
         for j in range(256 * iterations):
             for i in range(self.strip.numPixels()):
                 self.set_pixel_color(i, self.wheel((i + j) & 255))
@@ -84,7 +89,7 @@ class LEDStrip:
             time.sleep(wait_ms / 1000.0)
 
     def rainbow_cycle(self, wait_ms=20, iterations=5):
-        """Draw rainbow that uniformly distributes itself across all pixels."""
+        # Draw rainbow that uniformly distributes itself across all pixels
         for j in range(256 * iterations):
             for i in range(self.strip.numPixels()):
                 self.set_pixel_color(i, self.wheel((int(i * 256 / self.strip.numPixels()) + j) & 255))
@@ -92,7 +97,7 @@ class LEDStrip:
             time.sleep(wait_ms / 1000.0)
 
     def theater_chase_rainbow(self, wait_ms=50):
-        """Rainbow movie theater light style chaser animation."""
+        # Rainbow movie theater light style chaser animation
         for j in range(256):
             for q in range(3):
                 for i in range(0, self.strip.numPixels(), 3):

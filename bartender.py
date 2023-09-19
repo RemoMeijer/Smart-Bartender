@@ -150,9 +150,7 @@ class Bartender(MenuDelegate):
         self.menuContext = MenuContext(m, self)
 
     def filterDrinks(self, menu):
-        """
-        Removes any drinks that can't be handled by the pump configuration
-        """
+        # Removes any drinks that can't be handled by the pump configuration
         for i in menu.options:
             if i.type == "drink":
                 i.visible = False
@@ -168,9 +166,7 @@ class Bartender(MenuDelegate):
                 self.filterDrinks(i)
 
     def selectConfigurations(self, menu):
-        """
-        Adds a selection star to the pump configuration option
-        """
+        # Adds a selection star to the pump configuration option
         for i in menu.options:
             if i.type == "pump_selection":
                 key = i.attributes["key"]
@@ -207,7 +203,9 @@ class Bartender(MenuDelegate):
         self.stopInterrupts()
         self.running = True
 
-        light_thread = threading.Thread(target=strip)
+        # Set LED to red when cleaning
+        light_thread = threading.Thread(target=strip.set_all(255, 0, 0))
+        light_thread.start()
 
         for pump in self.pump_configuration.keys():
             pump_t = threading.Thread(target=self.pour, args=(self.pump_configuration[pump]["pin"], waitTime))
@@ -248,12 +246,9 @@ class Bartender(MenuDelegate):
         displayOLEDText(disp2, second_part)
 
     def pour(self, pin, waitTime):
-        print(f"Pin {pin} Low")
+        # Set pump active for wait time
         GPIO.output(pin, GPIO.LOW)
-
         time.sleep(waitTime)
-
-        print(f"Pin {pin} High")
         GPIO.output(pin, GPIO.HIGH)
 
     def progressBar(self, waitTime):
@@ -263,7 +258,7 @@ class Bartender(MenuDelegate):
             time.sleep(interval)
 
     def makeDrink(self, drink, ingredients):
-        # cancel any button presses while the drink is being made
+        # Cancel any button presses while the drink is being made
         self.stopInterrupts()
         self.running = True
 
@@ -278,9 +273,11 @@ class Bartender(MenuDelegate):
         while distance > GLASS_DETECTION_RANGE:
             displayOLEDText(disp, "No glass")
             distance = calculateGlassDistance()
-            time.sleep(0.1)
+            time.sleep(0.2)
 
-        displayOLEDText(disp, "Glass detected")
+        displayOLEDText(disp, "Glass")
+        displayOLEDText(disp2, "Detected")
+        time.sleep(0.5)
 
         # Parse the drink ingredients and spawn threads for pumps
         maxTime = 0
@@ -294,25 +291,27 @@ class Bartender(MenuDelegate):
                     pump_t = threading.Thread(target=self.pour, args=(self.pump_configuration[pump]["pin"], waitTime))
                     pumpThreads.append(pump_t)
 
-        # start the pump threads
+        # Start the pump threads
         for thread in pumpThreads:
             thread.start()
 
-        # start the progress bar
+        displayOLEDText(disp, "Pouring")
+
+        # Start the progress bar
         self.progressBar(maxTime)
 
-        # wait for threads to finish
+        # Wait for threads to finish
         for thread in pumpThreads:
             thread.join()
 
-        # show the main menu
+        # Show the main menu
         self.menuContext.showMenu()
 
-        # stop the light thread
+        # Stop the light thread
         lightsThread.do_run = False
         lightsThread.join()
 
-        # show the ending sequence lights
+        # Show the ending sequence lights
         strip.lightsEndingSequence()
 
         # sleep for a couple seconds to make sure the interrupts don't get triggered
@@ -323,17 +322,15 @@ class Bartender(MenuDelegate):
         self.running = False
 
     def left_btn(self):
-        print("Left")
         if not self.running:
             self.menuContext.advance()
 
     def right_btn(self):
-        print("Right")
         if not self.running:
             self.menuContext.select()
 
     def updateProgressBar(self, percent):
-        displayOLEDText(disp, percent)
+        displayOLEDText(disp2, f"{percent}%")
 
     def run(self):
         self.startInterrupts()
