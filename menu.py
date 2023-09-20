@@ -78,18 +78,18 @@ class MenuContext(object):
 
     def select(self):
         """
-		Selects the current menu option. Calls menuItemClicked first. If it returns false,
-		it uses the default logic. If true, it calls display with the current selection
+        Selects the current menu option. Calls menuItemClicked first. If it returns false,
+        it uses the default logic. If true, it calls display with the current selection
 
-		defaults:
-			"menu" -> sets submenu as the current menu
-			"back" -> sets parent menu as the current menu
+        defaults:
+            "menu" -> sets submenu as the current menu
+            "back" -> sets parent menu as the current menu
 
-		returns True if the default logic should be overridden
+        returns True if the default logic should be overridden
 
-		throws ValueError if navigating back on a top-level menu
+        throws ValueError if navigating back on a top-level menu
 
-		"""
+        """
         selection = self.currentMenu.getSelection()
         if not self.delegate.menuItemClicked(selection):
             if selection.type == "menu":

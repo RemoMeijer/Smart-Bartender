@@ -22,11 +22,13 @@ disp = Adafruit_SSD1306.SSD1306_128_64(rst=24, dc=23, spi=SPI.SpiDev(0, 0, max_s
 disp.begin()
 disp.clear()
 disp.display()
+disp_cs_pin = 7
 
 disp2 = Adafruit_SSD1306.SSD1306_128_64(rst=24, dc=23, spi=SPI.SpiDev(0, 0, max_speed_hz=8000000))
 disp2.begin()
 disp2.clear()
 disp2.display()
+disp2_cs_pin = 8
 
 # Button pins
 LEFT_BTN_PIN = 4
@@ -58,7 +60,8 @@ def calculateGlassDistance():
     return ultrasonic.distance * 100
 
 
-def displayOLEDText(display, text):
+def displayOLEDText(display, cs_pin, text):
+    GPIO.output(cs_pin, GPIO.LOW)  # Turn on the display
     display.clear()
 
     image = Image.new('1', (display.width, display.height))
@@ -68,6 +71,7 @@ def displayOLEDText(display, text):
 
     display.image(image)
     display.display()
+    GPIO.output(cs_pin, GPIO.HIGH)  # Turn off the display
 
 
 class Bartender(MenuDelegate):
@@ -84,6 +88,10 @@ class Bartender(MenuDelegate):
         # Configure Ultrasonic device
         GPIO.setup(TRIGGER_PIN, GPIO.OUT)
         GPIO.setup(ECHO_PIN, GPIO.IN)
+
+        # Set display off
+        GPIO.output(cs_pin_disp, GPIO.HIGH)  # Turn off disp
+        GPIO.output(cs_pin_disp2, GPIO.HIGH)  # Turn off disp2
 
         # Load the pump configuration from file
         self.pump_configuration = Bartender.readPumpConfiguration()
@@ -206,8 +214,8 @@ class Bartender(MenuDelegate):
         self.stopInterrupts()
         self.running = True
 
-        displayOLEDText(disp, "Clean")
-        displayOLEDText(disp2, "ing")
+        displayOLEDText(disp, disp_cs_pin, "Clean")
+        displayOLEDText(disp2, disp2_cs_pin, "ing")
 
         # Set LED to red when cleaning
         light_thread = threading.Thread(target=strip.set_all(0, 0, 255))
@@ -228,8 +236,8 @@ class Bartender(MenuDelegate):
         for thread in pumpThreads:
             thread.join()
 
-        displayOLEDText(disp, "Done")
-        displayOLEDText(disp2, "clean\ning")
+        displayOLEDText(disp, disp_cs_pin, "Done")
+        displayOLEDText(disp2, disp2_cs_pin, "clean\ning")
 
         time.sleep(1)
 
@@ -253,11 +261,12 @@ class Bartender(MenuDelegate):
             first_part = menuItem.name[:6]
             second_part = menuItem.name[6:]
 
-        displayOLEDText(disp, first_part)
-        displayOLEDText(disp2, second_part)
+        displayOLEDText(disp, disp_cs_pin, first_part)
+        displayOLEDText(disp2, disp2_cs_pin, second_part)
 
     def pour(self, pin, waitTime):
         # Set pump active for wait time
+        print(f"Pouring pin {pin}")
         GPIO.output(pin, GPIO.LOW)
         time.sleep(waitTime)
         GPIO.output(pin, GPIO.HIGH)
@@ -282,12 +291,12 @@ class Bartender(MenuDelegate):
 
         # Wait until glass is placed
         while distance > GLASS_DETECTION_RANGE:
-            displayOLEDText(disp, "No\nglass")
+            displayOLEDText(disp, disp_cs_pin, "No\nglass")
             distance = calculateGlassDistance()
             time.sleep(0.2)
 
-        displayOLEDText(disp, "Glass")
-        displayOLEDText(disp2, "Detected")
+        displayOLEDText(disp, disp_cs_pin, "Glass")
+        displayOLEDText(disp2, disp2_cs_pin, "Detected")
         time.sleep(0.5)
 
         # Parse the drink ingredients and spawn threads for pumps
@@ -306,7 +315,7 @@ class Bartender(MenuDelegate):
         for thread in pumpThreads:
             thread.start()
 
-        displayOLEDText(disp, "Pouring")
+        displayOLEDText(disp, disp_cs_pin, "Pouring")
 
         # Start the progress bar
         self.progressBar(maxTime)
@@ -342,7 +351,7 @@ class Bartender(MenuDelegate):
 
     def updateProgressBar(self, percent):
         # On disp2, because disp1 already states: "Pouring"
-        displayOLEDText(disp2, f"{percent}%")
+        displayOLEDText(disp2, disp2_cs_pin, f"{percent}%")
 
     def run(self):
         self.startInterrupts()
