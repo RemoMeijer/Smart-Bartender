@@ -17,24 +17,15 @@ class LEDStrip:
     def show(self):
         self.strip.show()
 
-    def set_all(self, r=None, g=None, b=None, color=None):
-        if color is not None:
-            # If color parameter is provided, use it
-            for i in range(self.strip.numPixels()):
-                self.set_pixel_color(i, color)
-        elif r is not None and g is not None and b is not None:
-            # If r, g, and b parameters are provided, create a Color object and use it
-            self.set_all(Color(r, g, b))
-        else:
-            # Handle the case where neither color nor r, g, b are provided
-            raise ValueError("Either 'color' or 'r', 'g', and 'b' must be provided.")
-
-        self.show()
+    def set_all(self, r, g, b):
+        for i in range(self.strip.numPixels()):
+            self.set_pixel_color(i, Color(r, g, b))
+            self.show()
 
     def turn_off(self):
         self.set_all(0, 0, 0)
 
-    def color_wipe(self, color, wait_ms=50):
+    def color_wipe(self, color, wait_ms=1):
         # Wipe color across display a pixel at a time
         for i in range(self.strip.numPixels()):
             self.set_pixel_color(i, color)
@@ -103,8 +94,4 @@ class LEDStrip:
                     self.set_pixel_color(i + q, 0)
 
     def start_up(self):
-        self.color_wipe(Color(255, 255, 0))
-        time.sleep(0.5)
-        self.turn_off()
-        time.sleep(0.5)
-        self.set_all(Color(255, 255, 0))
+        self.set_all(255, 255, 255)

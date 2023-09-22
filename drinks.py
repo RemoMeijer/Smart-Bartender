@@ -9,8 +9,8 @@ drink_list = [
 	}, {
 		"name": "Gin & Tonic",
 		"ingredients": {
-			"gin": 50,
-			"tonic": 150
+			"gin": 10,
+			"tonic": 10
 		}
 	}, {
 		"name": "Long Island",
@@ -45,6 +45,12 @@ drink_list = [
 		"ingredients": {
 			"tequila": 50,
 			"oj": 150
+		}
+	}, {
+		"name": "Baco",
+		"ingredients": {
+			"bacardi": 200,
+			"cola": 50
 		}
 	}
 ]

@@ -2,6 +2,8 @@ import json
 import threading
 import time
 import traceback
+import signal
+import sys
 
 import Adafruit_GPIO.SPI as SPI
 import Adafruit_SSD1306
@@ -10,29 +12,26 @@ import RPi.GPIO as GPIO
 from PIL import Image
 from PIL import ImageDraw
 from PIL import ImageFont
-from gpiozero import DistanceSensor
 from LedControl import LEDStrip
 
+import faulthandler; faulthandler.enable()
+
 from menu import MenuItem, Menu, Back, MenuContext, MenuDelegate
+from drinks import drink_list, drink_options
+
 
 GPIO.setmode(GPIO.BCM)
 
 # OLED init
 disp = Adafruit_SSD1306.SSD1306_128_64(rst=24, dc=23, spi=SPI.SpiDev(0, 0, max_speed_hz=8000000))
-disp.begin()
-disp.clear()
-disp.display()
 disp_cs_pin = 7
 
 disp2 = Adafruit_SSD1306.SSD1306_128_64(rst=24, dc=23, spi=SPI.SpiDev(0, 0, max_speed_hz=8000000))
-disp2.begin()
-disp2.clear()
-disp2.display()
 disp2_cs_pin = 8
 
 # Button pins
-LEFT_BTN_PIN = 4
-RIGHT_BTN_PIN = 25
+LEFT_BTN_PIN = 25
+RIGHT_BTN_PIN = 4
 
 # LED strip init
 LED_COUNT = 30
@@ -45,19 +44,41 @@ LED_CHANNEL = 0
 strip = LEDStrip(LED_COUNT, LED_PIN, LED_FREQ_HZ, LED_DMA, LED_INVERT, LED_BRIGHTNESS, LED_CHANNEL)
 
 # Ultrasonic init
-TRIGGER_PIN = 22
-ECHO_PIN = 27
-GLASS_DETECTION_RANGE = 10
+TRIGGER_PIN = 27
+ECHO_PIN = 22
+GLASS_DETECTION_RANGE_MAX = 20
+GLASS_DETECTION_RANGE_MIN = 10
 
 # Flow rate of the pumps
-# Todo: Configure!
-FLOW_RATE = 5
+FLOW_RATE = 0.033
 
 
 def calculateGlassDistance():
-    ultrasonic = DistanceSensor(echo=ECHO_PIN, trigger=TRIGGER_PIN)
-    # Need to convert to cm
-    return ultrasonic.distance * 100
+    # set Trigger to HIGH
+    GPIO.output(TRIGGER_PIN, True)
+
+    # set Trigger after 0.01ms to LOW
+    time.sleep(0.00001)
+    GPIO.output(TRIGGER_PIN, False)
+
+    StartTime = time.time()
+    StopTime = time.time()
+
+    # save StartTime
+    while GPIO.input(ECHO_PIN) == 0:
+        StartTime = time.time()
+
+    # save time of arrival
+    while GPIO.input(ECHO_PIN) == 1:
+        StopTime = time.time()
+
+    # time difference between start and arrival
+    TimeElapsed = StopTime - StartTime
+    # multiply with the sonic speed (34300 cm/s)
+    # and divide by 2, because there and back
+    distance = (TimeElapsed * 34300) / 2
+
+    return distance
 
 
 def displayOLEDText(display, cs_pin, text):
@@ -77,6 +98,7 @@ def displayOLEDText(display, cs_pin, text):
 class Bartender(MenuDelegate):
     def __init__(self):
         self.running = False
+        self.makingDrink = False
 
         self.btn1Pin = LEFT_BTN_PIN
         self.btn2Pin = RIGHT_BTN_PIN
@@ -89,18 +111,27 @@ class Bartender(MenuDelegate):
         GPIO.setup(TRIGGER_PIN, GPIO.OUT)
         GPIO.setup(ECHO_PIN, GPIO.IN)
 
+        GPIO.setup(disp_cs_pin, GPIO.OUT)
+        GPIO.setup(disp2_cs_pin, GPIO.OUT)
+
         # Set display off
-        GPIO.output(cs_pin_disp, GPIO.HIGH)  # Turn off disp
-        GPIO.output(cs_pin_disp2, GPIO.HIGH)  # Turn off disp2
+        GPIO.output(disp_cs_pin, GPIO.LOW)
+        GPIO.output(disp2_cs_pin, GPIO.LOW)
+
+        disp.begin()
+        disp.clear()
+        disp.display()
+
+        disp2.begin()
+        disp2.clear()
+        disp2.display()
 
         # Load the pump configuration from file
         self.pump_configuration = Bartender.readPumpConfiguration()
         for pump in self.pump_configuration.keys():
             GPIO.setup(self.pump_configuration[pump]["pin"], GPIO.OUT, initial=GPIO.HIGH)
 
-        # LED strip startup
-        strip.start_up()
-        strip.turn_off()
+        strip.set_all(0, 255, 0)
 
         print("Done initializing")
 
@@ -114,8 +145,8 @@ class Bartender(MenuDelegate):
             json.dump(configuration, jsonFile)
 
     def startInterrupts(self):
-        GPIO.add_event_detect(self.btn1Pin, GPIO.RISING, callback=self.left_btn)
-        GPIO.add_event_detect(self.btn2Pin, GPIO.RISING, callback=self.right_btn)
+        GPIO.add_event_detect(self.btn1Pin, GPIO.RISING, callback=self.left_btn, bouncetime=100)
+        GPIO.add_event_detect(self.btn2Pin, GPIO.RISING, callback=self.right_btn, bouncetime=200)
 
     def stopInterrupts(self):
         GPIO.remove_event_detect(self.btn1Pin)
@@ -195,7 +226,7 @@ class Bartender(MenuDelegate):
 
     def menuItemClicked(self, menuItem):
         if menuItem.type == "drink":
-            self.makeDrink(menuItem.name, menuItem.attributes["ingredients"])
+            self.makeDrink(menuItem.attributes["ingredients"])
             return True
         elif menuItem.type == "pump_selection":
             self.pump_configuration[menuItem.attributes["key"]]["value"] = menuItem.attributes["value"]
@@ -207,9 +238,6 @@ class Bartender(MenuDelegate):
         return False
 
     def clean(self):
-        waitTime = 10
-        pumpThreads = []
-
         # Cancel any button presses while the drink is being made
         self.stopInterrupts()
         self.running = True
@@ -217,39 +245,48 @@ class Bartender(MenuDelegate):
         displayOLEDText(disp, disp_cs_pin, "Clean")
         displayOLEDText(disp2, disp2_cs_pin, "ing")
 
-        # Set LED to red when cleaning
-        light_thread = threading.Thread(target=strip.set_all(0, 0, 255))
-        light_thread.start()
+        try:
+            waitTime = 5
+            pumpThreads = []
 
-        for pump in self.pump_configuration.keys():
-            pump_t = threading.Thread(target=self.pour, args=(self.pump_configuration[pump]["pin"], waitTime))
-            pumpThreads.append(pump_t)
 
-        # Start the pump threads
-        for thread in pumpThreads:
-            thread.start()
+            for pump in self.pump_configuration.keys():
+                pump_t = threading.Thread(target=self.pour, args=(self.pump_configuration[pump]["pin"], waitTime))
+                pumpThreads.append(pump_t)
 
-        # Start the progress bar
-        self.progressBar(waitTime)
+            # Start the pump threads
+            for thread in pumpThreads:
+                thread.start()
 
-        # Wait for threads to finish
-        for thread in pumpThreads:
-            thread.join()
+            # Set LED to red when cleaning
+            strip.set_all(0, 0, 255)
 
-        displayOLEDText(disp, disp_cs_pin, "Done")
-        displayOLEDText(disp2, disp2_cs_pin, "clean\ning")
+            # Start the progress bar
+            self.progressBar(waitTime)
 
-        time.sleep(1)
+            # Wait for threads to finish
+            for thread in pumpThreads:
+                thread.join()
 
-        # Show the main menu
-        self.menuContext.showMenu()
+            displayOLEDText(disp, disp_cs_pin, "Done c")
+            displayOLEDText(disp2, disp2_cs_pin, "leaning")
 
-        # Sleep for a couple seconds to make sure the interrupts don't get triggered
-        time.sleep(2)
+            time.sleep(1)
 
-        # Re-enable interrupts
-        self.startInterrupts()
-        self.running = False
+            # Show the main menu
+            self.menuContext.showMenu()
+
+        except Exception as e:
+            # Handle exceptions here if needed
+            print(f"Exception: {e}")
+
+        finally:
+            # Re-enable interrupts
+            print("finally")
+            self.startInterrupts()
+            self.running = False
+
+        return
 
     def displayMenuItem(self, menuItem):
         print(menuItem.name)
@@ -275,29 +312,26 @@ class Bartender(MenuDelegate):
         interval = waitTime / 100.0
         for x in range(1, 101):
             self.updateProgressBar(str(x))
-            time.sleep(interval)
+            time.sleep(interval / 2.5)
 
-    def makeDrink(self, drink, ingredients):
+    def makeDrink(self, ingredients):
         # Cancel any button presses while the drink is being made
         self.stopInterrupts()
         self.running = True
+        self.makingDrink = True
 
-        # launch a thread to control lighting
-        lightsThread = threading.Thread(target=strip.rainbow())
-        lightsThread.start()
+        strip.set_all(255, 0, 0)
+
 
         # Set distance over the range, so we won't skip the loop
-        distance = GLASS_DETECTION_RANGE
+        distance = 0
 
         # Wait until glass is placed
-        while distance > GLASS_DETECTION_RANGE:
-            displayOLEDText(disp, disp_cs_pin, "No\nglass")
+        while distance > GLASS_DETECTION_RANGE_MAX or distance < GLASS_DETECTION_RANGE_MIN:
+            displayOLEDText(disp, disp_cs_pin, "No")
+            displayOLEDText(disp2, disp2_cs_pin, "Glass")
             distance = calculateGlassDistance()
-            time.sleep(0.2)
-
-        displayOLEDText(disp, disp_cs_pin, "Glass")
-        displayOLEDText(disp2, disp2_cs_pin, "Detected")
-        time.sleep(0.5)
+            time.sleep(0.1)
 
         # Parse the drink ingredients and spawn threads for pumps
         maxTime = 0
@@ -315,37 +349,36 @@ class Bartender(MenuDelegate):
         for thread in pumpThreads:
             thread.start()
 
-        displayOLEDText(disp, disp_cs_pin, "Pouring")
-
         # Start the progress bar
-        self.progressBar(maxTime)
+        # self.progressBar(maxTime)
+        displayOLEDText(disp, disp_cs_pin, "Pouring")
 
         # Wait for threads to finish
         for thread in pumpThreads:
             thread.join()
 
-        # Show the main menu
-        self.menuContext.showMenu()
+        displayOLEDText(disp, disp_cs_pin, "Remove")
+        displayOLEDText(disp2, disp2_cs_pin, "Glass")
 
-        # Stop the light thread
-        lightsThread.do_run = False
-        lightsThread.join()
+        distance = 15
+        while GLASS_DETECTION_RANGE_MAX > distance > GLASS_DETECTION_RANGE_MIN:
+            strip.set_all(0, 255, 0)
+            time.sleep(0.1)
+            distance = calculateGlassDistance()
+            print(f"distance: {distance}cm")
 
-        # Show the ending sequence lights
-        strip.lightsEndingSequence()
+        print("Glass removed")
+        self.makingDrink = False
 
-        # sleep for a couple seconds to make sure the interrupts don't get triggered
-        time.sleep(2)
+        return
 
-        # re-enable interrupts
-        self.startInterrupts()
-        self.running = False
-
-    def left_btn(self):
+    def left_btn(self, button=None):
+        print(f"left:{button}")
         if not self.running:
             self.menuContext.advance()
 
-    def right_btn(self):
+    def right_btn(self, button=None):
+        print(f"right: {button}")
         if not self.running:
             self.menuContext.select()
 
@@ -353,16 +386,35 @@ class Bartender(MenuDelegate):
         # On disp2, because disp1 already states: "Pouring"
         displayOLEDText(disp2, disp2_cs_pin, f"{percent}%")
 
+    def enableInterruptsAgain(self):
+        time.sleep(2)
+        self.startInterrupts()
+        self.running = False
+
     def run(self):
         self.startInterrupts()
 
         # main loop
         try:
             while True:
-                time.sleep(1)
+                if self.running:
+                    setToFalseThread = threading.Thread(target=self.enableInterruptsAgain())
+                    setToFalseThread.start()
+
+                    setToFalseThread.join()
+
+                if not self.makingDrink:
+                    strip.set_all(255, 20, 147)
+
+                time.sleep(0.1)
 
         except KeyboardInterrupt:
             GPIO.cleanup()  # clean up GPIO on CTRL+C exit
         GPIO.cleanup()  # clean up GPIO on normal exit
 
         traceback.print_exc()
+
+
+bartender = Bartender()
+bartender.buildMenu(drink_list, drink_options)
+bartender.run()
