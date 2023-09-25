@@ -2,11 +2,10 @@ import http.server
 import socketserver
 import json
 import threading
+import time
 from bartender import Bartender
-
 from drinks import drink_list
 from drinks import drink_options
-
 
 def canMakeDrink(pumps, drink):
     # Get ingredients
@@ -82,24 +81,25 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
 
         if identifier is not None and data is not None:
             if identifier == 'Drink':
-                bartender.doMakeDrink(data)
+                # bartender.doMakeDrink(data)
+                print("drink")
             elif identifier == 'CustomDrink':
-                bartender.doMakeCustomDrink(data)
+                # bartender.doMakeCustomDrink(data)
+                print("baa")
             else:
                 print(f"No valid identifier {identifier}")
         else:
             print(f"Non valid data:{post_data}")
 
 
-if __name__ == "__main__":
-    # Set up the server
+if __name__ == '__main__':
     port = 8081  # Choose an available port
+    bartender = Bartender()
+    bartender.buildMenu(drink_list, drink_options)
+    bartenderThread = threading.Thread(target=bartender.run)
+    bartenderThread.start()
+
     with socketserver.TCPServer(("", port), MyHandler) as httpd:
         print(f"Serving at port {port}")
-        bartender = Bartender()
-        bartender.buildMenu(drink_list, drink_options)
-
-        bartender_thread = threading.Thread(target=bartender.run)
-        bartender_thread.start()
-
         httpd.serve_forever()
+

@@ -11,16 +11,17 @@ from PIL import Image
 from PIL import ImageDraw
 from PIL import ImageFont
 from LedControl import LEDStrip
+from drinks import drink_list, drink_options
+
+import faulthandler
 
 from menu import MenuItem, Menu, Back, MenuContext, MenuDelegate
 
-GPIO.setmode(GPIO.BCM)
-
 # OLED init lock Frequency set to 10MHz from 8 MHz
-disp = Adafruit_SSD1306.SSD1306_128_64(rst=24, dc=23, spi=SPI.SpiDev(0, 0, max_speed_hz=10000000))
+disp = Adafruit_SSD1306.SSD1306_128_64(rst=24, dc=23, spi=SPI.SpiDev(0, 0, max_speed_hz=8000000))
 disp_cs_pin = 7
 
-disp2 = Adafruit_SSD1306.SSD1306_128_64(rst=24, dc=23, spi=SPI.SpiDev(0, 0, max_speed_hz=10000000))
+disp2 = Adafruit_SSD1306.SSD1306_128_64(rst=24, dc=23, spi=SPI.SpiDev(0, 0, max_speed_hz=8000000))
 disp2_cs_pin = 8
 
 # Button pins
@@ -91,8 +92,16 @@ def displayOLEDText(display, cs_pin, text):
 
 class Bartender(MenuDelegate):
     def __init__(self):
+        GPIO.setmode(GPIO.BCM)
         self.running = False
         self.makingDrink = False
+        self.enableInterrupts = False
+        self.isContinuousPour = True
+        self.isPouring = False
+        self.pouringMode = False
+        self.pouringPin = None
+
+        faulthandler.enable()
 
         self.btn1Pin = LEFT_BTN_PIN
         self.btn2Pin = RIGHT_BTN_PIN
@@ -124,8 +133,6 @@ class Bartender(MenuDelegate):
         self.pump_configuration = Bartender.readPumpConfiguration()
         for pump in self.pump_configuration.keys():
             GPIO.setup(self.pump_configuration[pump]["pin"], GPIO.OUT, initial=GPIO.HIGH)
-
-        strip.set_all(0, 255, 0)
 
         print("Done initializing")
 
@@ -176,6 +183,7 @@ class Bartender(MenuDelegate):
         configuration_menu.addOptions(pump_opts)
         # add a back button to the configuration menu
         configuration_menu.addOption(Back("Back"))
+
         # adds an option that cleans all pumps to the configuration menu
         configuration_menu.addOption(MenuItem('clean', 'Clean'))
         configuration_menu.setParent(m)
@@ -235,49 +243,37 @@ class Bartender(MenuDelegate):
         # Cancel any button presses while the drink is being made
         self.stopInterrupts()
         self.running = True
+        self.makingDrink = True
+
+        strip.set_all(0, 0, 255)
 
         displayOLEDText(disp, disp_cs_pin, "Clean")
         displayOLEDText(disp2, disp2_cs_pin, "ing")
 
-        try:
-            waitTime = 5
-            pumpThreads = []
 
-            for pump in self.pump_configuration.keys():
-                pump_t = threading.Thread(target=self.pour, args=(self.pump_configuration[pump]["pin"], waitTime))
-                pumpThreads.append(pump_t)
+        waitTime = 5
+        pumpThreads = []
 
-            # Start the pump threads
-            for thread in pumpThreads:
-                thread.start()
+        for pump in self.pump_configuration.keys():
+            pump_t = threading.Thread(target=self.pour, args=(self.pump_configuration[pump]["pin"], waitTime))
+            pumpThreads.append(pump_t)
 
-            # Set LED to red when cleaning
-            strip.set_all(0, 0, 255)
+        # Start the pump threads
+        for thread in pumpThreads:
+            thread.start()
 
-            # Start the progress bar
-            self.progressBar(waitTime)
+        # Start the progress bar
+        self.progressBar(waitTime)
 
-            # Wait for threads to finish
-            for thread in pumpThreads:
-                thread.join()
+        # Wait for threads to finish
+        for thread in pumpThreads:
+            thread.join()
 
-            displayOLEDText(disp, disp_cs_pin, "Done c")
-            displayOLEDText(disp2, disp2_cs_pin, "leaning")
+        displayOLEDText(disp, disp_cs_pin, "Done c")
+        displayOLEDText(disp2, disp2_cs_pin, "leaning")
 
-            time.sleep(1)
-
-            # Show the main menu
-            self.menuContext.showMenu()
-
-        except Exception as e:
-            # Handle exceptions here if needed
-            print(f"Exception: {e}")
-
-        finally:
-            # Re-enable interrupts
-            print("finally")
-            self.startInterrupts()
-            self.running = False
+        self.makingDrink = False
+        self.enableInterrupts = True
 
         return
 
@@ -302,14 +298,7 @@ class Bartender(MenuDelegate):
         GPIO.output(pin, GPIO.HIGH)
 
     def progressBar(self, waitTime):
-        # waitTime - 2 to account for delay between timer and pouring
-        # interval = (waitTime - 2)/ 100.0
-        # for x in range(1, 101):
-        #    self.updateProgressBar(str(x))
-        #    time.sleep(interval / 2.5)
-        #   Increase in increments of 5% to slow donw display
-        # TODO reSync to Pump
-        interval = ((waitTime) / 100.0) * 5
+        interval = (waitTime / 100.0) * 5
         for x in range(1, 21):
             self.updateProgressBar(str(x * 5))
             time.sleep(interval)
@@ -325,12 +314,10 @@ class Bartender(MenuDelegate):
         # Set distance over the range, so we won't skip the loop
         distance = 0
         # Display No Glass msg before loop to keep second oled from stuttering
-        # displayOLEDText(disp, disp_cs_pin, "No")
+        displayOLEDText(disp, disp_cs_pin, "No")
         displayOLEDText(disp2, disp2_cs_pin, "Glass")
         # Wait until glass is placed
         while distance > GLASS_DETECTION_RANGE_MAX or distance < GLASS_DETECTION_RANGE_MIN:
-            #    displayOLEDText(disp, disp_cs_pin, "No")
-            #    displayOLEDText(disp2, disp2_cs_pin, "Glass")
             distance = calculateGlassDistance()
             time.sleep(0.1)
 
@@ -370,6 +357,7 @@ class Bartender(MenuDelegate):
 
         print("Glass removed")
         self.makingDrink = False
+        self.enableInterrupts = True
 
         return
 
@@ -388,7 +376,7 @@ class Bartender(MenuDelegate):
         displayOLEDText(disp2, disp2_cs_pin, f"{percent}%")
 
     def enableInterruptsAgain(self):
-        time.sleep(2)
+        time.sleep(1)
         self.startInterrupts()
         self.running = False
 
@@ -398,13 +386,14 @@ class Bartender(MenuDelegate):
         # main loop
         try:
             while True:
-                if self.running:
+                if self.enableInterrupts:
                     setToFalseThread = threading.Thread(target=self.enableInterruptsAgain())
                     setToFalseThread.start()
                     setToFalseThread.join()
+                    self.enableInterrupts = False
 
                 if not self.makingDrink:
-                    strip.set_all(255, 20, 147)
+                    strip.set_all(255, 255, 255)
 
                 time.sleep(0.1)
 
