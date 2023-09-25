@@ -2,8 +2,6 @@ import json
 import threading
 import time
 import traceback
-import signal
-import sys
 
 import Adafruit_GPIO.SPI as SPI
 import Adafruit_SSD1306
@@ -15,7 +13,6 @@ from PIL import ImageFont
 from LedControl import LEDStrip
 
 from menu import MenuItem, Menu, Back, MenuContext, MenuDelegate
-from drinks import drink_list, drink_options
 
 GPIO.setmode(GPIO.BCM)
 
@@ -404,7 +401,6 @@ class Bartender(MenuDelegate):
                 if self.running:
                     setToFalseThread = threading.Thread(target=self.enableInterruptsAgain())
                     setToFalseThread.start()
-
                     setToFalseThread.join()
 
                 if not self.makingDrink:
@@ -417,8 +413,3 @@ class Bartender(MenuDelegate):
         GPIO.cleanup()  # clean up GPIO on normal exit
 
         traceback.print_exc()
-
-
-bartender = Bartender()
-bartender.buildMenu(drink_list, drink_options)
-bartender.run()
