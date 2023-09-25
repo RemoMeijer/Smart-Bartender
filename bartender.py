@@ -14,19 +14,16 @@ from PIL import ImageDraw
 from PIL import ImageFont
 from LedControl import LEDStrip
 
-import faulthandler; faulthandler.enable()
-
 from menu import MenuItem, Menu, Back, MenuContext, MenuDelegate
 from drinks import drink_list, drink_options
 
-
 GPIO.setmode(GPIO.BCM)
 
-# OLED init
-disp = Adafruit_SSD1306.SSD1306_128_64(rst=24, dc=23, spi=SPI.SpiDev(0, 0, max_speed_hz=8000000))
+# OLED init lock Frequency set to 10MHz from 8 MHz
+disp = Adafruit_SSD1306.SSD1306_128_64(rst=24, dc=23, spi=SPI.SpiDev(0, 0, max_speed_hz=10000000))
 disp_cs_pin = 7
 
-disp2 = Adafruit_SSD1306.SSD1306_128_64(rst=24, dc=23, spi=SPI.SpiDev(0, 0, max_speed_hz=8000000))
+disp2 = Adafruit_SSD1306.SSD1306_128_64(rst=24, dc=23, spi=SPI.SpiDev(0, 0, max_speed_hz=10000000))
 disp2_cs_pin = 8
 
 # Button pins
@@ -145,8 +142,8 @@ class Bartender(MenuDelegate):
             json.dump(configuration, jsonFile)
 
     def startInterrupts(self):
-        GPIO.add_event_detect(self.btn1Pin, GPIO.RISING, callback=self.left_btn, bouncetime=100)
-        GPIO.add_event_detect(self.btn2Pin, GPIO.RISING, callback=self.right_btn, bouncetime=200)
+        GPIO.add_event_detect(self.btn1Pin, GPIO.RISING, callback=self.left_btn, bouncetime=400)
+        GPIO.add_event_detect(self.btn2Pin, GPIO.RISING, callback=self.right_btn, bouncetime=800)
 
     def stopInterrupts(self):
         GPIO.remove_event_detect(self.btn1Pin)
@@ -249,7 +246,6 @@ class Bartender(MenuDelegate):
             waitTime = 5
             pumpThreads = []
 
-
             for pump in self.pump_configuration.keys():
                 pump_t = threading.Thread(target=self.pour, args=(self.pump_configuration[pump]["pin"], waitTime))
                 pumpThreads.append(pump_t)
@@ -309,10 +305,17 @@ class Bartender(MenuDelegate):
         GPIO.output(pin, GPIO.HIGH)
 
     def progressBar(self, waitTime):
-        interval = waitTime / 100.0
-        for x in range(1, 101):
-            self.updateProgressBar(str(x))
-            time.sleep(interval / 2.5)
+        # waitTime - 2 to account for delay between timer and pouring
+        # interval = (waitTime - 2)/ 100.0
+        # for x in range(1, 101):
+        #    self.updateProgressBar(str(x))
+        #    time.sleep(interval / 2.5)
+        #   Increase in increments of 5% to slow donw display
+        # TODO reSync to Pump
+        interval = ((waitTime) / 100.0) * 5
+        for x in range(1, 21):
+            self.updateProgressBar(str(x * 5))
+            time.sleep(interval)
 
     def makeDrink(self, ingredients):
         # Cancel any button presses while the drink is being made
@@ -322,14 +325,15 @@ class Bartender(MenuDelegate):
 
         strip.set_all(255, 0, 0)
 
-
         # Set distance over the range, so we won't skip the loop
         distance = 0
-
+        # Display No Glass msg before loop to keep second oled from stuttering
+        # displayOLEDText(disp, disp_cs_pin, "No")
+        displayOLEDText(disp2, disp2_cs_pin, "Glass")
         # Wait until glass is placed
         while distance > GLASS_DETECTION_RANGE_MAX or distance < GLASS_DETECTION_RANGE_MIN:
-            displayOLEDText(disp, disp_cs_pin, "No")
-            displayOLEDText(disp2, disp2_cs_pin, "Glass")
+            #    displayOLEDText(disp, disp_cs_pin, "No")
+            #    displayOLEDText(disp2, disp2_cs_pin, "Glass")
             distance = calculateGlassDistance()
             time.sleep(0.1)
 
@@ -348,16 +352,16 @@ class Bartender(MenuDelegate):
         # Start the pump threads
         for thread in pumpThreads:
             thread.start()
-
-        # Start the progress bar
-        # self.progressBar(maxTime)
-        displayOLEDText(disp, disp_cs_pin, "Pouring")
+        # Display pouring
+        displayOLEDText(disp, disp_cs_pin, "Pour")
+        # start progress bar
+        self.progressBar(maxTime)
 
         # Wait for threads to finish
         for thread in pumpThreads:
             thread.join()
-
-        displayOLEDText(disp, disp_cs_pin, "Remove")
+        # Move Glass instead of Remove Glass to fit in screen
+        displayOLEDText(disp, disp_cs_pin, "Move")
         displayOLEDText(disp2, disp2_cs_pin, "Glass")
 
         distance = 15
