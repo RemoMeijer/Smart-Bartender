@@ -96,10 +96,6 @@ class Bartender(MenuDelegate):
         self.running = False
         self.makingDrink = False
         self.enableInterrupts = False
-        self.isContinuousPour = True
-        self.isPouring = False
-        self.pouringMode = False
-        self.pouringPin = None
 
         faulthandler.enable()
 
@@ -245,11 +241,10 @@ class Bartender(MenuDelegate):
         self.running = True
         self.makingDrink = True
 
-        strip.set_all(0, 0, 255)
+        strip.setAll(0, 0, 255)
 
         displayOLEDText(disp, disp_cs_pin, "Clean")
         displayOLEDText(disp2, disp2_cs_pin, "ing")
-
 
         waitTime = 5
         pumpThreads = []
@@ -290,7 +285,8 @@ class Bartender(MenuDelegate):
         displayOLEDText(disp, disp_cs_pin, first_part)
         displayOLEDText(disp2, disp2_cs_pin, second_part)
 
-    def pour(self, pin, waitTime):
+    @staticmethod
+    def pour(pin, waitTime):
         # Set pump active for wait time
         print(f"Pouring pin {pin}")
         GPIO.output(pin, GPIO.LOW)
@@ -303,13 +299,16 @@ class Bartender(MenuDelegate):
             self.updateProgressBar(str(x * 5))
             time.sleep(interval)
 
+    def returnMakingDrink(self):
+        return self.makingDrink
+
     def makeDrink(self, ingredients):
         # Cancel any button presses while the drink is being made
         self.stopInterrupts()
         self.running = True
         self.makingDrink = True
 
-        strip.set_all(255, 0, 0)
+        strip.setAll(255, 0, 0)
 
         # Set distance over the range, so we won't skip the loop
         distance = 0
@@ -350,7 +349,7 @@ class Bartender(MenuDelegate):
 
         distance = 15
         while GLASS_DETECTION_RANGE_MAX > distance > GLASS_DETECTION_RANGE_MIN:
-            strip.set_all(0, 255, 0)
+            strip.setAll(0, 255, 0)
             time.sleep(0.1)
             distance = calculateGlassDistance()
             print(f"distance: {distance}cm")
@@ -362,16 +361,15 @@ class Bartender(MenuDelegate):
         return
 
     def left_btn(self, button=None):
-        print(f"left:{button}")
         if not self.running:
             self.menuContext.advance()
 
     def right_btn(self, button=None):
-        print(f"right: {button}")
         if not self.running:
             self.menuContext.select()
 
-    def updateProgressBar(self, percent):
+    @staticmethod
+    def updateProgressBar(percent):
         # On disp2, because disp1 already states: "Pouring"
         displayOLEDText(disp2, disp2_cs_pin, f"{percent}%")
 
@@ -393,7 +391,7 @@ class Bartender(MenuDelegate):
                     self.enableInterrupts = False
 
                 if not self.makingDrink:
-                    strip.set_all(255, 255, 255)
+                    strip.idle()
 
                 time.sleep(0.1)
 

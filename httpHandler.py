@@ -7,6 +7,7 @@ from bartender import Bartender
 from drinks import drink_list
 from drinks import drink_options
 
+
 def canMakeDrink(pumps, drink):
     # Get ingredients
     for ingredient in drink["ingredients"]:
@@ -24,7 +25,7 @@ def canMakeDrink(pumps, drink):
     return True
 
 
-def returnAvailableDrinks():
+def returnAvailableDrinksToClient():
     availableDrinks = []
     json_file_path = "pump_config.json"
 
@@ -42,7 +43,7 @@ def returnAvailableDrinks():
 
 
 # Define the request handler class
-class MyHandler(http.server.SimpleHTTPRequestHandler):
+class HttpHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, request: bytes, client_address: tuple[str, int], server: socketserver.BaseServer):
         super().__init__(request, client_address, server)
 
@@ -50,7 +51,7 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
         # request on /getDrinks
         if self.path == "/getDrinks":
             # Get all available drinks
-            availableDrinks = returnAvailableDrinks()
+            availableDrinks = returnAvailableDrinksToClient()
             response_json = json.dumps(availableDrinks)
 
             # Send back the available drinks
@@ -60,36 +61,23 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(response_json.encode('utf-8'))
 
         # On HTTP POST request
+
     def do_POST(self):
         content_length = int(self.headers['Content-Length'])
         post_data = self.rfile.read(content_length)
         post_data = post_data.decode('utf-8')
 
-        # Split the data on the newline (or whatever is needed)
-        lines = post_data.split('\n')
-        identifier = None
-        data = None
+        # We received this
+        print(f"Post data: {post_data}")
 
-        for line in lines:
-            parts = line.split(":")
-            if len(parts) == 2:
-                key, value = parts[0], parts[1]
-                if key == 'Identifier':
-                    identifier = value
-                if key == 'Data':
-                    data = value
-
-        if identifier is not None and data is not None:
-            if identifier == 'Drink':
-                # bartender.doMakeDrink(data)
-                print("drink")
-            elif identifier == 'CustomDrink':
-                # bartender.doMakeCustomDrink(data)
-                print("baa")
-            else:
-                print(f"No valid identifier {identifier}")
-        else:
-            print(f"Non valid data:{post_data}")
+        # Iterate through the list of drinks
+        for drink in drink_list:
+            # Find drink
+            if post_data == drink["name"]:
+                # Check if available
+                if not bartender.makingDrink:
+                    # If bartender is free, make drink
+                    bartender.makeDrink(drink["ingredients"])
 
 
 if __name__ == '__main__':
@@ -99,7 +87,6 @@ if __name__ == '__main__':
     bartenderThread = threading.Thread(target=bartender.run)
     bartenderThread.start()
 
-    with socketserver.TCPServer(("", port), MyHandler) as httpd:
+    with socketserver.TCPServer(("", port), HttpHandler) as httpd:
         print(f"Serving at port {port}")
         httpd.serve_forever()
-
