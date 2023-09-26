@@ -48,6 +48,7 @@ class HttpHandler(http.server.SimpleHTTPRequestHandler):
         super().__init__(request, client_address, server)
 
     def do_GET(self):
+        print("get")
         # request on /getDrinks
         if self.path == "/getDrinks":
             # Get all available drinks
@@ -60,7 +61,17 @@ class HttpHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(response_json.encode('utf-8'))
 
-        # On HTTP POST request
+        if self.path == "/getPumps":
+            with open("pump_config.json", "w") as jsonFile:
+                response_json = ''
+                json.dump(response_json, jsonFile)
+
+                # Send back the available drinks
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(response_json.encode('utf-8'))
+
 
     def do_POST(self):
         content_length = int(self.headers['Content-Length'])
