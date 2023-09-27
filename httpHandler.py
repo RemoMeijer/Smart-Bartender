@@ -1,9 +1,8 @@
 import http.server
 import socketserver
 import json
-import threading
-import time
 from bartender import Bartender
+import threading
 from drinks import drink_list
 from drinks import drink_options
 
@@ -62,16 +61,17 @@ class HttpHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(response_json.encode('utf-8'))
 
         if self.path == "/getPumps":
-            with open("pump_config.json", "w") as jsonFile:
-                response_json = ''
-                json.dump(response_json, jsonFile)
+            with open("pump_config.json", "r") as jsonFile:
+                json_data = json.load(jsonFile)
+
+                response_json = json.dumps(json_data)
 
                 # Send back the available drinks
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
                 self.end_headers()
-                self.wfile.write(response_json.encode('utf-8'))
 
+                self.wfile.write(response_json.encode('utf-8'))
 
     def do_POST(self):
         content_length = int(self.headers['Content-Length'])
@@ -85,6 +85,7 @@ class HttpHandler(http.server.SimpleHTTPRequestHandler):
         for drink in drink_list:
             # Find drink
             if post_data == drink["name"]:
+                print("Found drink")
                 # Check if available
                 if not bartender.makingDrink:
                     # If bartender is free, make drink
@@ -92,7 +93,7 @@ class HttpHandler(http.server.SimpleHTTPRequestHandler):
 
 
 if __name__ == '__main__':
-    port = 8081  # Choose an available port
+    port = 8080  # Choose an available port
     bartender = Bartender()
     bartender.buildMenu(drink_list, drink_options)
     bartenderThread = threading.Thread(target=bartender.run)

@@ -3,8 +3,8 @@ drink_list = [
     {
         "name": "Rum & Coke",
         "ingredients": {
-            "rum": 50,
-            "coke": 150
+            "rum": 45,
+            "coke": 250
         }
     }, {
         "name": "Gin & Tonic",
@@ -16,25 +16,25 @@ drink_list = [
         "name": "Screw driver",
         "ingredients": {
             "vodka": 75,
-            "fanta": 150
+            "fanta": 250
         }
     }, {
         "name": "Gin & Juice",
         "ingredients": {
-            "gin": 50,
+            "gin": 45,
             "oj": 150
         }
     }, {
         "name": "Baco",
         "ingredients": {
-            "bacardi": 200,
-            "coke": 50
+            "bacardi": 45,
+            "coke": 250
         }
     }, {
         "name": "Gin Rickey",
         "ingredients": {
             "gin": 60,
-            "sprite": 180,
+            "sprite": 250,
         }
     }, {
         "name": "Moscow Mule",
@@ -46,35 +46,51 @@ drink_list = [
     }, {
         "name": "Mojito",
         "ingredients": {
-            "bacardi": 60,
-            "sprite": 15
+            "bacardi": 40,
+            "sprite": 250
         }
     }, {
         "name": "Gim   let",
         "ingredients": {
-            "gin": 90,
+            "gin": 40,
             "lime juice": 30,
         }
     }, {
         "name": "Cuban Screw",
         "ingredients": {
-            "bacardi": 75,
-            "fanta": 135,
+            "bacardi": 40,
+            "fanta": 250,
         }
     }, {
         "name": "Blind bat",
         "ingredients": {
-            "vodka": 100,
-            "coke": 100,
-            "bacardi": 50,
+            "vodka": 20,
+            "coke": 200,
+            "bacardi": 30,
         }
     }, {
         "name": "Russ  ian 7",
         "ingredients": {
             "vodka": 45,
-            "sprite": 150,
+            "sprite": 250,
+        }
+    },{
+        "name": "Cola",
+        "ingredients": {
+            "coke": 350,
+        }
+    },{
+        "name": "Fanta",
+        "ingredients": {
+            "fanta": 350,
         }
     },
+{
+        "name": "Sprite",
+        "ingredients": {
+            "sprite": 350,
+        }
+    }
 ]
 
 drink_options = [

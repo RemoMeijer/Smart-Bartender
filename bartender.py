@@ -182,6 +182,7 @@ class Bartender(MenuDelegate):
 
         # adds an option that cleans all pumps to the configuration menu
         configuration_menu.addOption(MenuItem('clean', 'Clean'))
+        configuration_menu.addOption(MenuItem('miniclean', 'Mini  Clean'))
         configuration_menu.setParent(m)
 
         m.addOptions(drink_opts)
@@ -233,7 +234,47 @@ class Bartender(MenuDelegate):
         elif menuItem.type == "clean":
             self.clean()
             return True
+        elif menuItem.type == "miniclean":
+            self.miniClean()
+            return True
         return False
+
+    def miniClean(self):
+        # Cancel any button presses while the drink is being made
+        self.stopInterrupts()
+        self.running = True
+        self.makingDrink = True
+
+        strip.setAll(0, 0, 255)
+
+        displayOLEDText(disp, disp_cs_pin, "Clean")
+        displayOLEDText(disp2, disp2_cs_pin, "ing")
+
+        waitTime = 1
+        pumpThreads = []
+
+        for pump in self.pump_configuration.keys():
+            pump_t = threading.Thread(target=self.pour, args=(self.pump_configuration[pump]["pin"], waitTime))
+            pumpThreads.append(pump_t)
+
+        # Start the pump threads
+        for thread in pumpThreads:
+            thread.start()
+
+        # Start the progress bar
+        self.progressBar(waitTime)
+
+        # Wait for threads to finish
+        for thread in pumpThreads:
+            thread.join()
+
+        displayOLEDText(disp, disp_cs_pin, "Done c")
+        displayOLEDText(disp2, disp2_cs_pin, "leaning")
+
+        self.makingDrink = False
+        self.enableInterrupts = True
+
+        return
 
     def clean(self):
         # Cancel any button presses while the drink is being made
